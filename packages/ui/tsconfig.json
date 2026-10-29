@@ -1,0 +1,10 @@
+{
+  "extends": "@workspace/tsconfig/react.json",
+  "include": ["."],
+  "exclude": ["node_modules", "dist"],
+  "compilerOptions": {
+    "paths": {
+      "@workspace/ui/*": ["./src/*"]
+    }
+  }
+}

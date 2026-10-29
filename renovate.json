@@ -1,0 +1,68 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "helpers:pinGitHubActionDigests",
+    "customManagers:githubActionsVersions"
+  ],
+  "schedule": ["before 6am on monday"],
+  "osvVulnerabilityAlerts": true,
+  "packageRules": [
+    {
+      "description": "Workflow actions (pinned to commit SHAs) and the zizmor version in ci.yml.",
+      "matchManagers": ["github-actions", "custom.regex"],
+      "matchFileNames": [".github/workflows/**"],
+      "groupName": "github actions"
+    },
+    {
+      "description": "Convex and its components in one PR. Upgrades can change the committed convex/_generated/.",
+      "matchPackageNames": ["convex", "convex-helpers", "convex-test", "@convex-dev/**"],
+      "groupName": "convex",
+      "prBodyNotes": [
+        "Run `bun run setup` on this branch and commit any change under `packages/backend/convex/_generated/` before merging."
+      ]
+    },
+    {
+      "description": "Convex Auth's beta and its TanStack Start adapter stay pinned exactly and move together (KNOWN_ISSUES.md). Upgrade them only on request, from the Dependency Dashboard.",
+      "matchPackageNames": ["@convex-dev/auth", "@samebase/convex-auth-tanstack-start"],
+      "groupName": "convex auth",
+      "dependencyDashboardApproval": true,
+      "prBodyNotes": [
+        "Check every item in `KNOWN_ISSUES.md` against the new versions, and remove the ones that are fixed."
+      ]
+    },
+    {
+      "matchPackageNames": ["@tanstack/**"],
+      "groupName": "tanstack"
+    },
+    {
+      "matchPackageNames": ["cf", "@cloudflare/**"],
+      "groupName": "cloudflare"
+    },
+    {
+      "description": "@types/node follows the Node major in .node-version.",
+      "matchPackageNames": ["@types/node"],
+      "allowedVersions": "<25"
+    },
+    {
+      "description": "The Vite+ catalog in the root package.json, tracked by the custom manager below.",
+      "matchPackageNames": ["vite-plus", "@voidzero-dev/vite-plus-core"],
+      "groupName": "vite-plus",
+      "prBodyNotes": [
+        "Renovate can't update `bun.lock` for the catalog. Run `bun install` on this branch and push the updated `bun.lock`."
+      ]
+    }
+  ],
+  "customManagers": [
+    {
+      "description": "Renovate's Bun manager doesn't read workspaces.catalog yet (renovatebot/renovate#42909).",
+      "customType": "regex",
+      "managerFilePatterns": ["/^package\\.json$/"],
+      "matchStrings": [
+        "\"vite\": \"npm:(?<depName>@voidzero-dev/vite-plus-core)@(?<currentValue>\\d[^\"]*)\"",
+        "\"(?<depName>vite-plus)\": \"(?<currentValue>\\d[^\"]*)\""
+      ],
+      "datasourceTemplate": "npm"
+    }
+  ]
+}

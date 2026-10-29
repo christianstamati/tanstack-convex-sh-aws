@@ -1,0 +1,3 @@
+# The root .gitignore already covers it, but the Convex CLI writes this file whenever it selects a
+# deployment here and finds no .gitignore listing .env.local (`bun run convex:local`, `convex:cloud`).
+.env.local

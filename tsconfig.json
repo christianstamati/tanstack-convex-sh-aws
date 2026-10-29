@@ -1,0 +1,10 @@
+{
+  "extends": "./packages/tsconfig/base.json",
+  // Only the root files: each app and package has its own tsconfig.
+  "include": ["scripts", "vite.config.ts"],
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "esModuleInterop": true
+  }
+}
