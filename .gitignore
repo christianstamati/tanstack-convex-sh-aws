@@ -42,3 +42,6 @@ coverage/
 
 # AI agent worktrees
 .claude/worktrees/
+
+# Alchemy's local cache
+.alchemy/

@@ -1,0 +1,103 @@
+# A Preview of a pull request: the `preview` label deploys it to the dev account as stage pr-<n>,
+# and each push updates it. Closing the pull request or removing the label destroys it, along
+# with its database. It needs no secrets: AWS trusts the `preview` GitHub Environment through
+# OIDC, and scripts/stage.ts reads the rest from SSM. Pull requests from forks get no Preview.
+name: Preview
+
+on:
+  pull_request:
+    types: [labeled, unlabeled, synchronize, reopened, closed]
+
+permissions:
+  contents: read
+
+# One at a time per pull request, and never cancelled: a cancelled deploy strands Alchemy's lock.
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: >-
+      github.event.action != 'closed' &&
+      !github.event.pull_request.draft &&
+      contains(github.event.pull_request.labels.*.name, 'preview') &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: preview
+    permissions:
+      contents: read
+      # Signs in to AWS through OIDC.
+      id-token: write
+      # Comments the URL on the pull request.
+      pull-requests: write
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+
+      # Reads the version from `packageManager` in package.json.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - run: bun install --frozen-lockfile
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: eu-central-1
+
+      - run: bun run --cwd packages/infra stage deploy "pr-$PR_NUMBER"
+
+      - name: Comment the URL
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr comment "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --edit-last --create-if-none \
+            --body "Preview: https://pr-$PR_NUMBER.preview.fullstackaws.dev (user \`preview\`, password in SSM at \`/tcs/dev/router/preview-password\`)"
+
+  destroy:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      ((github.event.action == 'closed' &&
+      contains(github.event.pull_request.labels.*.name, 'preview')) ||
+      (github.event.action == 'unlabeled' && github.event.label.name == 'preview'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: preview
+    permissions:
+      contents: read
+      # Signs in to AWS through OIDC.
+      id-token: write
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+
+      # Reads the version from `packageManager` in package.json.
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - run: bun install --frozen-lockfile
+
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: eu-central-1
+
+      - run: bun run --cwd packages/infra stage destroy "pr-$PR_NUMBER"
