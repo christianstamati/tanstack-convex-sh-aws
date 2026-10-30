@@ -33,6 +33,8 @@ export default {
           api.auth.completePasswordRecovery,
         ],
         cookieOptions,
+        // Behind CloudFront the Host header is the Lambda's, so name the origin browsers see.
+        allowedOrigins: process.env.SITE_ORIGIN ? [process.env.SITE_ORIGIN] : undefined,
       });
       switch (url.pathname) {
         case "/auth/signin":

@@ -33,3 +33,10 @@ has been deleted, except Alchemy's state and assets buckets, which real deploys 
 - **NAT instance:** `dnf` is killed for lack of memory on a t4g.nano, leaving cloud-init stuck and the NAT silently broken: the deploy and `alchemy plan` both look clean. The boot script adds 1 GB of swap first. Check forwarding on the instance, not the deploy log.
 - **`--env-file`** doesn't reach `process.env` in a stack file. Export the variables in the shell.
 - **Secrets:** `ORIGIN_SECRET` and `PREVIEW_BASIC_PASSWORD` must be set for each platform deploy. Read them back with `aws ssm get-parameter --with-decryption --name /tcs/dev/router/origin-secret`.
+
+## Found while deploying the first stage
+
+- **Origin check:** Convex Auth compares `Origin` with `Host`, and behind CloudFront `Host` is the Lambda's URL, so every sign-in got 403 `{"tokens":null}`. `server.ts` now passes `allowedOrigins` from `SITE_ORIGIN`.
+- **Basic Auth:** the auth proxy forwards `Authorization` to Convex, which answers `InvalidAdminKey`. The Router deletes the header once Basic Auth has passed.
+- **Design change:** `scripts/stage.ts` replaces the custom resource from the spike. It runs the provisioner, `alchemy deploy`, then `convex deploy`, and keeps database passwords out of Alchemy state.
+- **Tests:** `/health` can't catch either auth bug. Only a real sign-up through CloudFront did.

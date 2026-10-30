@@ -3,6 +3,7 @@
 //   bun run --cwd packages/infra platform --stage dev --profile tcs-dev
 import * as Alchemy from "alchemy";
 import * as AWS from "alchemy/AWS";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Output from "alchemy/Output";
 import { currentPlane, NAT_AMI, REGION, REPOSITORY, REPOSITORY_IDS } from "../lib/plane.ts";
@@ -116,9 +117,14 @@ export default Alchemy.Stack(
       ],
       tags,
     });
+    const provisionerGroup = yield* AWS.EC2.SecurityGroup("ProvisionerSecurityGroup", {
+      vpcId: network.vpcId,
+      description: "Stage provisioner: outbound only",
+      tags,
+    });
     const databaseGroup = yield* AWS.EC2.SecurityGroup("DatabaseSecurityGroup", {
       vpcId: network.vpcId,
-      description: "Postgres: from the backend and the bastion",
+      description: "Postgres: from the backend, bastion and provisioner",
       ingress: [
         {
           ipProtocol: "tcp",
@@ -133,6 +139,13 @@ export default Alchemy.Stack(
           toPort: 5432,
           referencedGroupId: natGroup.groupId,
           description: "Bastion",
+        },
+        {
+          ipProtocol: "tcp",
+          fromPort: 5432,
+          toPort: 5432,
+          referencedGroupId: provisionerGroup.groupId,
+          description: "Stage provisioner",
         },
       ],
       tags,
@@ -211,6 +224,54 @@ export default Alchemy.Stack(
     const importsBucket = yield* bucket("ImportsBucket", "imports", false);
     const searchBucket = yield* bucket("SearchBucket", "search", false);
 
+    const buckets = [filesBucket, modulesBucket, exportsBucket, importsBucket, searchBucket];
+    const provisioner = yield* AWS.Lambda.Function("Provisioner", {
+      functionName: `tcs-${plane.name}-provisioner`,
+      main: new URL("../provisioner/index.ts", import.meta.url).pathname,
+      handler: "handler",
+      isExternal: true,
+      functionUrl: false,
+      runtime: "nodejs24.x",
+      architecture: "arm64",
+      memorySize: 256,
+      timeout: Duration.seconds(60),
+      vpc: {
+        subnetIds: network.privateSubnetIds,
+        securityGroupIds: [provisionerGroup.groupId],
+      },
+      env: {
+        DATABASE_HOST: database.endpointAddress,
+        MASTER_SECRET_ARN: database.masterUserSecretArn,
+        BUCKETS: Output.interpolate`${filesBucket.bucketName},${modulesBucket.bucketName},${exportsBucket.bucketName},${importsBucket.bucketName},${searchBucket.bucketName}`,
+      },
+    });
+    yield* provisioner.bind`Provisioner`({
+      policyStatements: [
+        {
+          Effect: "Allow",
+          Action: ["secretsmanager:GetSecretValue"],
+          Resource: [database.masterUserSecretArn as unknown as string],
+        },
+        {
+          Effect: "Allow",
+          Action: ["ssm:GetParameter", "ssm:PutParameter", "ssm:DeleteParameter"],
+          Resource: [`arn:aws:ssm:${REGION}:${plane.accountId}:parameter/tcs/*/convex/*`],
+        },
+        {
+          Effect: "Allow",
+          Action: ["s3:ListBucket"],
+          Resource: buckets.map((item) => item.bucketArn as unknown as string),
+        },
+        {
+          Effect: "Allow",
+          Action: ["s3:DeleteObject"],
+          Resource: buckets.map(
+            (item) => Output.interpolate`${item.bucketArn}/*` as unknown as string,
+          ),
+        },
+      ],
+    });
+
     // Runs first in the viewer-request function: Basic Auth on previews, then the secret that
     // server.ts requires, since the Lambda's Function URL is public.
     const basicAuth = previewPassword
@@ -229,7 +290,9 @@ export default Alchemy.Stack(
             "cache-control": { value: "no-store" },
           },
         };
-      }`
+      }
+      // Spent: the auth proxy would pass it on to Convex, which reads it as an admin key.
+      delete event.request.headers.authorization;`
           : ""
       }
       event.request.headers["x-origin-secret"] = { value: ${JSON.stringify(originSecret)} };
