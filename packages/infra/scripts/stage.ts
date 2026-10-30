@@ -3,6 +3,8 @@
 //   bun run --cwd packages/infra stage destroy dev-chridev --profile tcs-dev
 // In CI, leave out --profile: AWS credentials come from the environment.
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { BACKEND_IMAGE } from "../lib/backend.ts";
@@ -56,7 +58,8 @@ function getParameter(name: string) {
 
 function provision(provisionAction: "create" | "delete") {
   console.log(`Provisioner: ${provisionAction} ${database}`);
-  const output = capture("aws", [
+  const outputFile = join(mkdtempSync(join(tmpdir(), "stage-")), "output.json");
+  capture("aws", [
     "lambda",
     "invoke",
     "--function-name",
@@ -67,8 +70,9 @@ function provision(provisionAction: "create" | "delete") {
     "120",
     "--payload",
     JSON.stringify({ action: provisionAction, stage, instanceName, database }),
-    "/dev/stdout",
+    outputFile,
   ]);
+  const output = readFileSync(outputFile, "utf8");
   if (!output.includes('"ok":true')) throw new Error(`Provisioner failed: ${output}`);
 }
 
