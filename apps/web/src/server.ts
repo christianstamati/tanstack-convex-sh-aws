@@ -12,6 +12,11 @@ const convex = new ConvexHttpClient(convexUrl);
 
 export default {
   async fetch(request: Request) {
+    // On AWS the Lambda's Function URL is public; only CloudFront knows the secret it adds.
+    const originSecret = process.env.ORIGIN_SECRET;
+    if (originSecret && request.headers.get("x-origin-secret") !== originSecret) {
+      return new Response("Forbidden", { status: 403 });
+    }
     const url = new URL(request.url);
     // `Secure` when the browser came over HTTPS. `bun run dev` serves plain HTTP.
     const cookieOptions = { secure: url.protocol === "https:" };

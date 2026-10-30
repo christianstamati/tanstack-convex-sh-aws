@@ -1,0 +1,16 @@
+{
+  "name": "@workspace/infra",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "spike:deploy": "alchemy deploy --config spike/alchemy.run.ts",
+    "spike:destroy": "alchemy destroy --config spike/alchemy.run.ts"
+  },
+  "devDependencies": {
+    "@effect/platform-bun": "4.0.5",
+    "@types/node": "^24",
+    "@workspace/tsconfig": "workspace:*",
+    "alchemy": "2.0.0-beta.83",
+    "effect": "4.0.5"
+  }
+}
