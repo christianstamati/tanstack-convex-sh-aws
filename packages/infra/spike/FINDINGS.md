@@ -26,3 +26,10 @@ has been deleted, except Alchemy's state and assets buckets, which real deploys 
 - **First deploy in a fresh account is flaky:** a race created the CloudFront Function before its KeyValueStore was provisioned, and the account-specific `<account>.cloudfront-kvs.global.api.aws` endpoint was not in DNS yet; macOS then cached the miss for ~13 minutes. Re-running `deploy` resumes. CI runners won't have the cached miss.
 - **Image path:** the Convex backend image is `ghcr.io/convex/convex-backend`, not `ghcr.io/get-convex/...`.
 - The CLI warns that beta.84 is out; it was 6 days old, so the spike stayed on beta.83.
+
+## Found while deploying the dev platform
+
+- **Router certificate:** with no aliases, `AWS.Website.Router` sends ACM an empty SAN list, which fails. Pass your own certificate as `domain.cert`.
+- **NAT instance:** `dnf` is killed for lack of memory on a t4g.nano, leaving cloud-init stuck and the NAT silently broken: the deploy and `alchemy plan` both look clean. The boot script adds 1 GB of swap first. Check forwarding on the instance, not the deploy log.
+- **`--env-file`** doesn't reach `process.env` in a stack file. Export the variables in the shell.
+- **Secrets:** `ORIGIN_SECRET` and `PREVIEW_BASIC_PASSWORD` must be set for each platform deploy. Read them back with `aws ssm get-parameter --with-decryption --name /tcs/dev/router/origin-secret`.

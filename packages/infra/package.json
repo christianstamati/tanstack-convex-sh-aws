@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dns": "alchemy deploy --config dns/alchemy.run.ts",
+    "platform": "alchemy deploy --config platform/alchemy.run.ts",
     "spike:deploy": "alchemy deploy --config spike/alchemy.run.ts",
     "spike:destroy": "alchemy destroy --config spike/alchemy.run.ts"
   },
